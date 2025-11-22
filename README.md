@@ -1,3 +1,3 @@
-# Hpercube Visualzation
+# Hypercube Visualization
 
-work in progres, cuda based hypercube thing
+work in progress, cuda based hypercube renderer

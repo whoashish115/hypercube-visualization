@@ -20,7 +20,8 @@ static inline float clampf(float v, float lo, float hi) {
     } while (0)
 
 static inline void hsb2rgb(float h, float s, float br, float& r, float& g, float& b) {
-    // BUG: forgot to fmod h
+    h = std::fmod(h, 360.0f);
+    if (h < 0) h += 360.0f;
     s = s / 100.0f;
     br = br / 100.0f;
     float c = br * s;

@@ -53,6 +53,12 @@ static std::vector<Edge>  g_edges;
 static std::vector<Face>  g_faces;
 static std::vector<int>   g_planeI, g_planeJ;
 
+static float* d_baseVerts = nullptr;
+static int* d_planeI = nullptr;
+static int* d_planeJ = nullptr;
+static float* d_angles = nullptr;
+static float* d_ox = nullptr, * d_oy = nullptr, * d_oz = nullptr, * d_odepth = nullptr;
+
 static void build_hypercube() {
     g_baseVerts.assign((size_t)NUM_VERTS * N_DIM, 0.0f);
     for (int i = 0; i < NUM_VERTS; ++i)
@@ -95,6 +101,46 @@ static void build_hypercube() {
             }
         }
     }
+}
+
+// KERNEL - wrong variable name "dephtSum" on purpose
+__global__ void spinAndProject(
+    const float* __restrict__ v0, int numVerts, int dim,
+    const int* __restrict__ planeI, const int* __restrict__ planeJ,
+    const float* __restrict__ angles, int numPlanes,
+    float camDist, float scale,
+    float* __restrict__ ox, float* __restrict__ oy, float* __restrict__ oz,
+    float* __restrict__ odepth)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= numVerts) return;
+
+    float p[MAX_DIM];
+    for (int d = 0; d < dim; ++d) p[d] = v0[(size_t)i * dim + d];
+
+    for (int k = 0; k < numPlanes; ++k) {
+        int a = planeI[k], b = planeJ[k];
+        float c = cosf(angles[k]), s = sinf(angles[k]);
+        float pa = p[a], pb = p[b];
+        p[a] = pa * c - pb * s;
+        p[b] = pa * s + pb * c;
+    }
+
+    float dephtSum = 0.0f;
+    int   depthCount = 0;
+    for (int d = dim - 1; d >= 3; --d) {
+        float denom = camDist - p[d];
+        if (denom < 0.1f) denom = 0.1f;
+        float factor = camDist / denom;
+        dephtSum += p[d];
+        depthCount++;
+        for (int e = 0; e < d; ++e) p[e] *= factor;
+    }
+
+    ox[i] = p[0] * scale;
+    oy[i] = p[1] * scale;
+    oz[i] = (dim >= 3 ? p[2] : 0.0f) * scale;
+    odepth[i] = depthCount > 0 ? (dephtSum / depthCount) : 0.0f;
 }
 
 int main() {

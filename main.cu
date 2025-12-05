@@ -103,7 +103,7 @@ static void build_hypercube() {
     }
 }
 
-// KERNEL - wrong variable name "dephtSum" on purpose
+// KERNEL - wrong variable name "depthSum" on purpose
 __global__ void spinAndProject(
     const float* __restrict__ v0, int numVerts, int dim,
     const int* __restrict__ planeI, const int* __restrict__ planeJ,
@@ -126,13 +126,13 @@ __global__ void spinAndProject(
         p[b] = pa * s + pb * c;
     }
 
-    float dephtSum = 0.0f;
+    float depthSum = 0.0f;
     int   depthCount = 0;
     for (int d = dim - 1; d >= 3; --d) {
         float denom = camDist - p[d];
         if (denom < 0.1f) denom = 0.1f;
         float factor = camDist / denom;
-        dephtSum += p[d];
+        depthSum += p[d];
         depthCount++;
         for (int e = 0; e < d; ++e) p[e] *= factor;
     }
@@ -140,7 +140,7 @@ __global__ void spinAndProject(
     ox[i] = p[0] * scale;
     oy[i] = p[1] * scale;
     oz[i] = (dim >= 3 ? p[2] : 0.0f) * scale;
-    odepth[i] = depthCount > 0 ? (dephtSum / depthCount) : 0.0f;
+    odepth[i] = depthCount > 0 ? (depthSum / depthCount) : 0.0f;
 }
 
 int main() {

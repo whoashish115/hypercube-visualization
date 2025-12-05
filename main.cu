@@ -143,8 +143,31 @@ __global__ void spinAndProject(
     odepth[i] = depthCount > 0 ? (depthSum / depthCount) : 0.0f;
 }
 
+
+static void allocDeviceBuffers() {
+    CUDA_CHECK(cudaMalloc(&d_baseVerts, sizeof(float) * g_baseVerts.size()));
+    CUDA_CHECK(cudaMalloc(&d_planeI, sizeof(int) * NUM_PLANES));
+    CUDA_CHECK(cudaMalloc(&d_planeJ, sizeof(int) * NUM_PLANES));
+    CUDA_CHECK(cudaMalloc(&d_angles, sizeof(float) * NUM_PLANES));
+    CUDA_CHECK(cudaMalloc(&d_ox, sizeof(float) * NUM_VERTS));
+    CUDA_CHECK(cudaMalloc(&d_oy, sizeof(float) * NUM_VERTS));
+    CUDA_CHECK(cudaMalloc(&d_oz, sizeof(float) * NUM_VERTS));
+    CUDA_CHECK(cudaMalloc(&d_odepth, sizeof(float) * NUM_VERTS));
+
+    CUDA_CHECK(cudaMemcpy(d_baseVerts, g_baseVerts.data(), sizeof(float) * g_baseVerts.size(), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_planeI, g_planeI.data(), sizeof(int) * NUM_PLANES, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_planeJ, g_planeJ.data(), sizeof(int) * NUM_PLANES, cudaMemcpyHostToDevice));
+}
+
+static void freeDeviceBuffers() {
+    cudaFree(d_baseVerts); cudaFree(d_planeI); cudaFree(d_planeJ); cudaFree(d_angles);
+    cudaFree(d_ox); cudaFree(d_oy); cudaFree(d_oz); cudaFree(d_odepth);
+}
+
 int main() {
     build_hypercube();
-    printf("verts: %d, edges: %zu, faces: %zu\n", NUM_VERTS, g_edges.size(), g_faces.size());
+    allocDeviceBuffers();
+    printf("allocated gpu buffers ok\n");
+    freeDeviceBuffers();
     return 0;
 }

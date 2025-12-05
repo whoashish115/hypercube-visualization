@@ -2,6 +2,14 @@
 #include <cstdlib>
 #include <cmath>
 #include <cuda_runtime.h>
+#include <vector>
+
+static constexpr int N_DIM = 5;
+static constexpr float MODEL_SCALE = 0.7f;
+static constexpr int MAX_DIM = 12;
+static_assert(N_DIM >= 2 && N_DIM <= MAX_DIM, "N_DIM out of supported range");
+static constexpr int NUM_VERTS = 1 << N_DIM;
+static constexpr int NUM_PLANES = N_DIM * (N_DIM - 1) / 2;
 
 static const float PI_F = 3.14159265358979323846f;
 
@@ -37,9 +45,60 @@ static inline void hsb2rgb(float h, float s, float br, float& r, float& g, float
     r = rp + m; g = gp + m; b = bp + m;
 }
 
+struct Edge { int a, b; };
+struct Face { int v[4]; };
+
+static std::vector<float> g_baseVerts;
+static std::vector<Edge>  g_edges;
+static std::vector<Face>  g_faces;
+static std::vector<int>   g_planeI, g_planeJ;
+
+static void build_hypercube() {
+    g_baseVerts.assign((size_t)NUM_VERTS * N_DIM, 0.0f);
+    for (int i = 0; i < NUM_VERTS; ++i)
+        for (int d = 0; d < N_DIM; ++d)
+            g_baseVerts[(size_t)i * N_DIM + d] = (i & (1 << d)) ? 1.0f : -1.0f;
+
+    g_edges.clear();
+    for (int i = 0; i < NUM_VERTS; ++i)
+        for (int bit = 0; bit < N_DIM; ++bit) {
+            int j = i ^ (1 << bit);
+            if (j > i) g_edges.push_back({ i, j });
+        }
+
+    g_planeI.clear(); g_planeJ.clear();
+    for (int i = 0; i < N_DIM; ++i)
+        for (int j = i + 1; j < N_DIM; ++j) {
+            g_planeI.push_back(i);
+            g_planeJ.push_back(j);
+        }
+
+    g_faces.clear();
+    if (N_DIM >= 2) {
+        for (int i = 0; i < N_DIM; ++i) {
+            for (int j = i + 1; j < N_DIM; ++j) {
+                std::vector<int> others;
+                for (int d = 0; d < N_DIM; ++d) if (d != i && d != j) others.push_back(d);
+                int otherDims = (int)others.size();
+                int combos = 1 << otherDims;
+                for (int c = 0; c < combos; ++c) {
+                    int baseMask = 0;
+                    for (int k = 0; k < otherDims; ++k)
+                        if (c & (1 << k)) baseMask |= (1 << others[k]);
+                    Face f;
+                    f.v[0] = baseMask;
+                    f.v[1] = baseMask | (1 << i);
+                    f.v[2] = baseMask | (1 << i) | (1 << j);
+                    f.v[3] = baseMask | (1 << j);
+                    g_faces.push_back(f);
+                }
+            }
+        }
+    }
+}
+
 int main() {
-    float r, g, b;
-    hsb2rgb(200.0f, 100.0f, 100.0f, r, g, b);
-    printf("rgb = %f %f %f\n", r, g, b);
+    build_hypercube();
+    printf("verts: %d, edges: %zu, faces: %zu\n", NUM_VERTS, g_edges.size(), g_faces.size());
     return 0;
 }

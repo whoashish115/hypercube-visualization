@@ -144,6 +144,39 @@ __global__ void spinAndProject(
 }
 
 
+
+static std::vector<float> g_ox, g_oy, g_oz, g_odepth;
+
+static void stepFrame(double t) {
+    std::vector<float> angles(NUM_PLANES);
+    for (int k = 0; k < NUM_PLANES; ++k) {
+        float speed = 0.12f + 0.05f * (float)((k * 37) % 11);
+        angles[k] = (float)(t * speed);
+    }
+    CUDA_CHECK(cudaMemcpy(d_angles, angles.data(), sizeof(float) * NUM_PLANES, cudaMemcpyHostToDevice));
+
+    const float camDist = 3.2f;
+    const float scale = 1.0f;
+    const int threads = 128;
+    const int blocks = (NUM_VERTS + threads - 1) / threads;
+
+    spinAndProject <<<blocks, threads>>> (
+        d_baseVerts, NUM_VERTS, N_DIM,
+        d_planeI, d_planeJ, d_angles, NUM_PLANES,
+        camDist, scale,
+        d_ox, d_oy, d_oz, d_odepth);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    g_ox.resize(NUM_VERTS); g_oy.resize(NUM_VERTS);
+    g_oz.resize(NUM_VERTS); g_odepth.resize(NUM_VERTS);
+
+    CUDA_CHECK(cudaMemcpy(g_ox.data(), d_ox, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(g_oy.data(), d_oy, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(g_oz.data(), d_oz, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(g_odepth.data(), d_odepth, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+}
+
 static void allocDeviceBuffers() {
     CUDA_CHECK(cudaMalloc(&d_baseVerts, sizeof(float) * g_baseVerts.size()));
     CUDA_CHECK(cudaMalloc(&d_planeI, sizeof(int) * NUM_PLANES));

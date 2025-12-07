@@ -1,8 +1,18 @@
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#pragma comment(lib, "opengl32.lib")
+#endif
+
+#include <SDL3/SDL.h>
+#include <GL/gl.h>
+#include <cuda_runtime.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
-#include <cuda_runtime.h>
 #include <vector>
+#include <algorithm>
 
 static constexpr int N_DIM = 5;
 static constexpr float MODEL_SCALE = 0.7f;
@@ -197,10 +207,76 @@ static void freeDeviceBuffers() {
     cudaFree(d_ox); cudaFree(d_oy); cudaFree(d_oz); cudaFree(d_odepth);
 }
 
-int main() {
+int main(int argc, char** argv) {
+    (void)argc; (void)argv;
+
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+    int winW = 1280, winH = 800;
+    char title[128];
+    std::snprintf(title, sizeof(title), "Hypercube N=%d - CUDA + SDL3 + OpenGL", N_DIM);
+    SDL_Window* window = SDL_CreateWindow(title, winW, winH,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (!window) {
+        std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    SDL_GLContext glctx = SDL_GL_CreateContext(window);
+    if (!glctx) {
+        std::fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+        return 1;
+    }
+    SDL_GL_SetSwapInterval(1);
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_LINE_SMOOTH);
+    glEnable(GL_POINT_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
     build_hypercube();
     allocDeviceBuffers();
-    printf("allocated gpu buffers ok\n");
+
+    bool running = true;
+    Uint64 lastTicks = SDL_GetTicks();
+    double tsec = 0.0;
+
+    while (running) {
+        SDL_Event ev;
+        while (SDL_PollEvent(&ev)) {
+            if (ev.type == SDL_EVENT_QUIT) running = false;
+            if (ev.type == SDL_EVENT_KEY_DOWN && ev.key.key == SDLK_ESCAPE) running = false;
+        }
+
+        Uint64 now = SDL_GetTicks();
+        double dt = (now - lastTicks) / 1000.0;
+        lastTicks = now;
+        tsec += dt;
+
+        stepFrame(tsec);
+
+        SDL_GetWindowSize(window, &winW, &winH);
+        glViewport(0, 0, winW, winH);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // TODO: add drawing code here
+
+        SDL_GL_SwapWindow(window);
+    }
+
     freeDeviceBuffers();
+    SDL_GL_DestroyContext(glctx);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
     return 0;
 }

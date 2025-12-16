@@ -207,6 +207,35 @@ static void freeDeviceBuffers() {
     cudaFree(d_ox); cudaFree(d_oy); cudaFree(d_oz); cudaFree(d_odepth);
 }
 
+
+static const float WORLD_SCALE = 160.0f;
+static const float BLUE_HUE_MIN = 200.0f;
+static const float BLUE_HUE_MAX = 220.0f;
+
+static inline float pickHue(float wobble) {
+    return BLUE_HUE_MIN + clampf(wobble, 0.0f, 1.0f) * (BLUE_HUE_MAX - BLUE_HUE_MIN);
+}
+
+static inline float px(int i) { return g_ox[i] * WORLD_SCALE * MODEL_SCALE; }
+static inline float py(int i) { return g_oy[i] * WORLD_SCALE * MODEL_SCALE; }
+static inline float pz(int i) { return g_oz[i] * WORLD_SCALE * MODEL_SCALE; }
+
+// first attempt at edges, no glow yet
+static void drawEdges(double t) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glLineWidth(2.0f);
+    glBegin(GL_LINES);
+    for (int e = 0; e < (int)g_edges.size(); ++e) {
+        const Edge& ed = g_edges[e];
+        glColor4f(0.0f, 1.0f, 1.0f, 1.0f);
+        glVertex3f(px(ed.a), py(ed.a), pz(ed.a));
+        glVertex3f(px(ed.b), py(ed.b), pz(ed.b));
+    }
+    glEnd();
+    glDisable(GL_BLEND);
+}
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
@@ -269,7 +298,19 @@ int main(int argc, char** argv) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // TODO: add drawing code here
+        float aspect = winH > 0 ? (float)winW / (float)winH : 1.0f;
+        float nearP = 1.0f, farP = 5000.0f;
+        float fovRad = 45.0f * PI_F / 180.0f;
+        float top = nearP * std::tan(fovRad * 0.5f);
+        float right = top * aspect;
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glFrustum(-right, right, -top, top, nearP, farP);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        glTranslatef(0.0f, 0.0f, -700.0f);
+
+        drawEdges(tsec);
 
         SDL_GL_SwapWindow(window);
     }

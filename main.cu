@@ -220,6 +220,38 @@ static inline float px(int i) { return g_ox[i] * WORLD_SCALE * MODEL_SCALE; }
 static inline float py(int i) { return g_oy[i] * WORLD_SCALE * MODEL_SCALE; }
 static inline float pz(int i) { return g_oz[i] * WORLD_SCALE * MODEL_SCALE; }
 
+
+static void drawFaces(double t) {
+    if (g_faces.empty()) return;
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+
+    glBegin(GL_QUADS);
+    for (int f = 0; f < (int)g_faces.size(); ++f) {
+        const Face& fc = g_faces[f];
+         float depthAvg = 0.0f;
+        for (int k = 0; k < 4; ++k) depthAvg += g_odepth[fc.v[k]];
+        depthAvg *= 0.25f;
+        float depthFade = clampf(0.4f + depthAvg * 0.35f, 0.2f, 1.0f);
+        float wobble = 0.5f + 0.5f * std::sin((float)(t * 0.15) + f * 0.11f);
+        float hue = pickHue(wobble);
+        float r, g, b;
+        hsb2rgb(190.0f, 100.0f, 100.0f, r, g, b);
+
+        glColor4f(r, g, b, 0.05f * depthFade);
+        for (int k = 0; k < 4; ++k) {
+            int vi = fc.v[k];
+            glVertex3f(px(vi), py(vi), pz(vi));
+        }
+    }
+    glEnd();
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+}
+
 // first attempt at edges, no glow yet
 static void drawEdges(double t) {
     glEnable(GL_BLEND);
@@ -310,6 +342,7 @@ int main(int argc, char** argv) {
         glLoadIdentity();
         glTranslatef(0.0f, 0.0f, -700.0f);
 
+        drawFaces(tsec);
         drawEdges(tsec);
 
         SDL_GL_SwapWindow(window);

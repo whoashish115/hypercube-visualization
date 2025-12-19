@@ -299,6 +299,48 @@ static void drawEdges(double t) {
     glDisable(GL_BLEND);
 }
 
+
+static void drawVerticies(double t) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+    struct GlowLayer { float size; float alphaScale; };
+    static const GlowLayer layers[2] = {
+        { 16.0f, 0.12f },
+        { 8.0f,  0.28f },
+    };
+
+    for (const GlowLayer& layer : layers) {
+        glBegin(GL_POINTS);
+        for (int i = 0; i < NUM_VERTS; ++i) {
+            float depthFade = clampf(0.55f + g_odepth[i] * 0.35f, 0.25f, 1.0f);
+            float wobble = 0.5f + 0.5f * std::sin((float)(t * 0.2) + i * 0.4f);
+            float hue = pickHue(wobble);
+            float r, g, b;
+            hsb2rgb(hue, 85.0f, 100.0f, r, g, b);
+            glColor4f(r, g, b, layer.alphaScale * depthFade);
+            glPointSize(layer.size);
+            glVertex3f(px(i), py(i), pz(i));
+        }
+        glEnd();
+    }
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glPointSize(3.5f);
+    glBegin(GL_POINTS);
+    for (int i = 0; i < NUM_VERTS; ++i) {
+        float wobble = 0.5f + 0.5f * std::sin((float)(t * 0.2) + i * 0.4f);
+        float hue = pickHue(wobble);
+        float r, g, b;
+        hsb2rgb(hue, 30.0f, 100.0f, r, g, b);
+        glColor4f(r, g, b, 1.0f);
+        glVertex3f(px(i), py(i), pz(i));
+    }
+    glEnd();
+
+    glDisable(GL_BLEND);
+}
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
@@ -375,6 +417,7 @@ int main(int argc, char** argv) {
 
         drawFaces(tsec);
         drawEdges(tsec);
+        drawVerticies(tsec);
 
         SDL_GL_SwapWindow(window);
     }

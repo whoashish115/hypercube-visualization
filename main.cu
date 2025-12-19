@@ -381,25 +381,64 @@ int main(int argc, char** argv) {
     allocDeviceBuffers();
 
     bool running = true;
+    bool dragging = false;
+    float yaw = 0.0f, pitchBase = 15.0f;
+    float camDist = 700.0f;
     Uint64 lastTicks = SDL_GetTicks();
     double tsec = 0.0;
+    bool autoSpin = true;
 
     while (running) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
-            if (ev.type == SDL_EVENT_QUIT) running = false;
-            if (ev.type == SDL_EVENT_KEY_DOWN && ev.key.key == SDLK_ESCAPE) running = false;
+            switch (ev.type) {
+            case SDL_EVENT_QUIT:
+                running = false;
+                break;
+            case SDL_EVENT_KEY_DOWN:
+                if (ev.key.key == SDLK_ESCAPE) running = false;
+                if (ev.key.key == SDLK_R) tsec = 0.0;
+                if (ev.key.key == SDLK_SPACE) autoSpin = !autoSpin;
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if (ev.button.button == SDL_BUTTON_LEFT) dragging = true;
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                if (ev.button.button == SDL_BUTTON_LEFT) dragging = false;
+                break;
+            case SDL_EVENT_MOUSE_MOTION:
+                if (dragging) {
+                    yaw += ev.motion.xrel * 0.25f;
+                    pitchBase += ev.motion.yrel * 0.25f;
+                    pitchBase = clampf(pitchBase, -89.0f, 89.0f);
+                }
+                break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                camDist -= ev.wheel.y * 30.0f;
+                camDist = clampf(camDist, 150.0f, 2500.0f);
+                break;
+            case SDL_EVENT_WINDOW_RESIZED:
+                winW = ev.window.data1;
+                winH = ev.window.data2;
+                break;
+            default:
+                break;
+            }
         }
 
         Uint64 now = SDL_GetTicks();
         double dt = (now - lastTicks) / 1000.0;
         lastTicks = now;
-        tsec += dt;
+        if (autoSpin) tsec += dt;
+
+        if (!dragging) yaw += (float)(dt * 6.0);
+        float pitch = pitchBase + std::sin(tsec * 0.15) * 4.0f;
 
         stepFrame(tsec);
 
         SDL_GetWindowSize(window, &winW, &winH);
         glViewport(0, 0, winW, winH);
+
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -408,12 +447,16 @@ int main(int argc, char** argv) {
         float fovRad = 45.0f * PI_F / 180.0f;
         float top = nearP * std::tan(fovRad * 0.5f);
         float right = top * aspect;
+
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         glFrustum(-right, right, -top, top, nearP, farP);
+
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
-        glTranslatef(0.0f, 0.0f, -700.0f);
+        glTranslatef(0.0f, 0.0f, -camDist);
+        glRotatef(pitch, 1.0f, 0.0f, 0.0f);
+        glRotatef(yaw, 0.0f, 1.0f, 0.0f);
 
         drawFaces(tsec);
         drawEdges(tsec);

@@ -252,19 +252,50 @@ static void drawFaces(double t) {
     glDisable(GL_BLEND);
 }
 
-// first attempt at edges, no glow yet
 static void drawEdges(double t) {
     glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+    struct GlowPass { float width; float alphaScale; };
+    static const GlowPass passes[3] = {
+        { 14.0f, 0.10f },
+        { 8.0f,  0.20f },
+        { 4.0f,  0.35f },
+    };
+
+    for (const GlowPass& gp : passes) {
+        glLineWidth(gp.width);
+        glBegin(GL_LINES);
+        for (int e = 0; e < (int)g_edges.size(); ++e) {
+            const Edge& ed = g_edges[e];
+            float depthAvg = (g_odepth[ed.a] + g_odepth[ed.b]) * 0.5f;
+           float depthFade = clampf(0.5f + depthAvg * 0.5f, 0.05f, 1.0f);
+            float wobble = 0.5f + 0.5f * std::sin((float)(t * 0.2) + e * 0.3f);
+            float hue = pickHue(wobble);
+            float r, g, b;
+            hsb2rgb(190.0f, 100.0f, 100.0f, r, g, b);
+            glColor4f(0.0f, 0.8f, 0.8f, 0.8f * depthFade);
+            glVertex3f(px(ed.a), py(ed.a), pz(ed.a));
+            glVertex3f(px(ed.b), py(ed.b), pz(ed.b));
+        }
+        glEnd();
+    }
+
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glLineWidth(2.0f);
     glBegin(GL_LINES);
     for (int e = 0; e < (int)g_edges.size(); ++e) {
         const Edge& ed = g_edges[e];
-        glColor4f(0.0f, 1.0f, 1.0f, 1.0f);
+        float wobble = 0.5f + 0.5f * std::sin((float)(t * 0.2) + e * 0.3f);
+        float hue = pickHue(wobble);
+        float r, g, b;
+        hsb2rgb(180.0f, 100.0f, 100.0f, r, g, b);
+        glColor4f(r, g, b, 1.0f);
         glVertex3f(px(ed.a), py(ed.a), pz(ed.a));
         glVertex3f(px(ed.b), py(ed.b), pz(ed.b));
     }
     glEnd();
+
     glDisable(GL_BLEND);
 }
 

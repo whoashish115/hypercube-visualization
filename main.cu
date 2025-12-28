@@ -16,16 +16,17 @@
 
 static constexpr int N_DIM = 5;
 static constexpr float MODEL_SCALE = 0.7f;
+
 static constexpr int MAX_DIM = 12;
 static_assert(N_DIM >= 2 && N_DIM <= MAX_DIM, "N_DIM out of supported range");
+
 static constexpr int NUM_VERTS = 1 << N_DIM;
 static constexpr int NUM_PLANES = N_DIM * (N_DIM - 1) / 2;
-
-static const float PI_F = 3.14159265358979323846f;
 
 static inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
+static const float PI_F = 3.14159265358979323846f;
 
 #define CUDA_CHECK(call)                                                     \
     do {                                                                     \
@@ -42,18 +43,22 @@ static inline void hsb2rgb(float h, float s, float br, float& r, float& g, float
     if (h < 0) h += 360.0f;
     s = s / 100.0f;
     br = br / 100.0f;
+
     float c = br * s;
     float x = c * (1.0f - std::fabs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
     float m = br - c;
     float rp, gp, bp;
+
     if (h < 60) { rp = c; gp = x; bp = 0; }
     else if (h < 120) { rp = x; gp = c; bp = 0; }
     else if (h < 180) { rp = 0; gp = c; bp = x; }
     else if (h < 240) { rp = 0; gp = x; bp = c; }
     else if (h < 300) { rp = x; gp = 0; bp = c; }
     else { rp = c; gp = 0; bp = x; }
+
     r = rp + m; g = gp + m; b = bp + m;
 }
+
 
 struct Edge { int a, b; };
 struct Face { int v[4]; };
@@ -71,16 +76,19 @@ static float* d_ox = nullptr, * d_oy = nullptr, * d_oz = nullptr, * d_odepth = n
 
 static void build_hypercube() {
     g_baseVerts.assign((size_t)NUM_VERTS * N_DIM, 0.0f);
-    for (int i = 0; i < NUM_VERTS; ++i)
-        for (int d = 0; d < N_DIM; ++d)
+    for (int i = 0; i < NUM_VERTS; ++i) {
+        for (int d = 0; d < N_DIM; ++d) {
             g_baseVerts[(size_t)i * N_DIM + d] = (i & (1 << d)) ? 1.0f : -1.0f;
+        }
+    }
 
     g_edges.clear();
-    for (int i = 0; i < NUM_VERTS; ++i)
+    for (int i = 0; i < NUM_VERTS; ++i) {
         for (int bit = 0; bit < N_DIM; ++bit) {
             int j = i ^ (1 << bit);
             if (j > i) g_edges.push_back({ i, j });
         }
+    }
 
     g_planeI.clear(); g_planeJ.clear();
     for (int i = 0; i < N_DIM; ++i)
@@ -101,6 +109,7 @@ static void build_hypercube() {
                     int baseMask = 0;
                     for (int k = 0; k < otherDims; ++k)
                         if (c & (1 << k)) baseMask |= (1 << others[k]);
+
                     Face f;
                     f.v[0] = baseMask;
                     f.v[1] = baseMask | (1 << i);
@@ -113,7 +122,7 @@ static void build_hypercube() {
     }
 }
 
-// KERNEL - wrong variable name "depthSum" on purpose
+
 __global__ void spinAndProject(
     const float* __restrict__ v0, int numVerts, int dim,
     const int* __restrict__ planeI, const int* __restrict__ planeJ,
@@ -153,40 +162,6 @@ __global__ void spinAndProject(
     odepth[i] = depthCount > 0 ? (depthSum / depthCount) : 0.0f;
 }
 
-
-
-static std::vector<float> g_ox, g_oy, g_oz, g_odepth;
-
-static void stepFrame(double t) {
-    std::vector<float> angles(NUM_PLANES);
-    for (int k = 0; k < NUM_PLANES; ++k) {
-        float speed = 0.12f + 0.05f * (float)((k * 37) % 11);
-        angles[k] = (float)(t * speed);
-    }
-    CUDA_CHECK(cudaMemcpy(d_angles, angles.data(), sizeof(float) * NUM_PLANES, cudaMemcpyHostToDevice));
-
-    const float camDist = 3.2f;
-    const float scale = 1.0f;
-    const int threads = 128;
-    const int blocks = (NUM_VERTS + threads - 1) / threads;
-
-    spinAndProject <<<blocks, threads>>> (
-        d_baseVerts, NUM_VERTS, N_DIM,
-        d_planeI, d_planeJ, d_angles, NUM_PLANES,
-        camDist, scale,
-        d_ox, d_oy, d_oz, d_odepth);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    g_ox.resize(NUM_VERTS); g_oy.resize(NUM_VERTS);
-    g_oz.resize(NUM_VERTS); g_odepth.resize(NUM_VERTS);
-
-    CUDA_CHECK(cudaMemcpy(g_ox.data(), d_ox, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(g_oy.data(), d_oy, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(g_oz.data(), d_oz, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(g_odepth.data(), d_odepth, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
-}
-
 static void allocDeviceBuffers() {
     CUDA_CHECK(cudaMalloc(&d_baseVerts, sizeof(float) * g_baseVerts.size()));
     CUDA_CHECK(cudaMalloc(&d_planeI, sizeof(int) * NUM_PLANES));
@@ -207,8 +182,42 @@ static void freeDeviceBuffers() {
     cudaFree(d_ox); cudaFree(d_oy); cudaFree(d_oz); cudaFree(d_odepth);
 }
 
+static std::vector<float> g_ox, g_oy, g_oz, g_odepth;
+
+static void stepFrame(double t) {
+    std::vector<float> angles(NUM_PLANES);
+    for (int k = 0; k < NUM_PLANES; ++k) {
+        float speed = 0.12f + 0.05f * (float)((k * 37) % 11);
+        angles[k] = (float)(t * speed);
+    }
+    CUDA_CHECK(cudaMemcpy(d_angles, angles.data(), sizeof(float) * NUM_PLANES, cudaMemcpyHostToDevice));
+
+    const float camDist = 3.2f;
+    const float scale = 1.0f;
+
+    const int threads = 128;
+    const int blocks = (NUM_VERTS + threads - 1) / threads;
+
+    spinAndProject << <blocks, threads >> > (
+        d_baseVerts, NUM_VERTS, N_DIM,
+        d_planeI, d_planeJ, d_angles, NUM_PLANES,
+        camDist, scale,
+        d_ox, d_oy, d_oz, d_odepth);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    g_ox.resize(NUM_VERTS); g_oy.resize(NUM_VERTS);
+    g_oz.resize(NUM_VERTS); g_odepth.resize(NUM_VERTS);
+
+    CUDA_CHECK(cudaMemcpy(g_ox.data(), d_ox, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(g_oy.data(), d_oy, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(g_oz.data(), d_oz, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(g_odepth.data(), d_odepth, sizeof(float) * NUM_VERTS, cudaMemcpyDeviceToHost));
+}
+
 
 static const float WORLD_SCALE = 160.0f;
+
 static const float BLUE_HUE_MIN = 200.0f;
 static const float BLUE_HUE_MAX = 220.0f;
 
@@ -219,7 +228,6 @@ static inline float pickHue(float wobble) {
 static inline float px(int i) { return g_ox[i] * WORLD_SCALE * MODEL_SCALE; }
 static inline float py(int i) { return g_oy[i] * WORLD_SCALE * MODEL_SCALE; }
 static inline float pz(int i) { return g_oz[i] * WORLD_SCALE * MODEL_SCALE; }
-
 
 static void drawFaces(double t) {
     if (g_faces.empty()) return;
@@ -298,7 +306,6 @@ static void drawEdges(double t) {
 
     glDisable(GL_BLEND);
 }
-
 
 static void drawVerticies(double t) {
     glEnable(GL_BLEND);
